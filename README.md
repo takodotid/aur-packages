@@ -19,4 +19,6 @@ Each package installs the binary of the project's GitHub release, checked agains
 
 The AUR accepts automation only with a person's review ([AUR submission guidelines](https://wiki.archlinux.org/title/AUR_submission_guidelines#Rules_of_submission)), so no workflow holds an AUR key.
 
+GitHub turns off a public repository's scheduled workflows after 60 days without activity. Run `update` by hand, or turn it on again under Actions, after a quiet stretch.
+
 A change to a PKGBUILD by hand: bump `pkgrel`, run `makepkg --printsrcinfo > .SRCINFO` in its directory, and build it with `makepkg -f` before the pull request.

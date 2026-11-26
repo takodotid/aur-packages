@@ -1,0 +1,6 @@
+# What makepkg leaves in a package directory.
+*/src/
+*/pkg/
+*.tar.gz
+*.pkg.tar.*
+*.log

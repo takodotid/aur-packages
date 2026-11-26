@@ -12,17 +12,24 @@ here=$(cd "$(dirname "$0")/.." && pwd)
 # .SRCINFO must be what makepkg writes for this PKGBUILD.
 diff -u "$here/$pkg/.SRCINFO" <(cd "$here/$pkg" && makepkg --printsrcinfo) || { echo "$pkg/.SRCINFO is stale" >&2; exit 1; }
 
+# The AUR takes pushes to master only. A new package's repository is empty: master starts there.
 clone=${AUR_CLONES:-$HOME/.cache/aur-clones}/$pkg
-if [[ -d $clone/.git ]]; then
-	git -C "$clone" pull -q --ff-only
+[[ -d $clone/.git ]] || git clone -q "ssh://aur@aur.archlinux.org/$pkg.git" "$clone" 2>/dev/null
+git -C "$clone" fetch -q origin
+if git -C "$clone" rev-parse -q --verify origin/master >/dev/null; then
+	git -C "$clone" checkout -q -B master
+	git -C "$clone" merge -q --ff-only origin/master
+	upstream=origin/master
 else
-	git clone -q "ssh://aur@aur.archlinux.org/$pkg.git" "$clone"
+	git -C "$clone" symbolic-ref HEAD refs/heads/master
+	upstream=
 fi
+push="git -C '$clone' push origin master"
 
 cp "$here/$pkg/PKGBUILD" "$here/$pkg/.SRCINFO" "$clone/"
 if [[ -z $(git -C "$clone" status --porcelain) ]]; then
-	if [[ -n $(git -C "$clone" log --oneline '@{u}..' 2>/dev/null) ]]; then
-		echo "$pkg is committed but not pushed. Push it with: git -C '$clone' push"
+	if [[ -n $(git -C "$clone" log --oneline ${upstream:+"$upstream.."}HEAD 2>/dev/null) ]]; then
+		echo "$pkg is committed but not pushed. Push it with: $push"
 	else
 		echo "the AUR has this $pkg already"
 	fi
@@ -33,4 +40,4 @@ git -C "$clone" --no-pager diff --cached
 version=$(sed -n 's/^pkgver=//p' "$clone/PKGBUILD")-$(sed -n 's/^pkgrel=//p' "$clone/PKGBUILD")
 git -C "$clone" commit -qm "$version"
 echo
-echo "Committed $pkg $version. Push it with: git -C '$clone' push"
+echo "Committed $pkg $version. Push it with: $push"

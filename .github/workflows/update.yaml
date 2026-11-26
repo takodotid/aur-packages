@@ -66,8 +66,9 @@ jobs:
           useradd -m builder
           chown -R builder "$GITHUB_WORKSPACE/$PACKAGE"
           su builder -c "cd '$GITHUB_WORKSPACE/$PACKAGE' && makepkg -f --noconfirm && makepkg --printsrcinfo > .SRCINFO"
-          namcap "$PACKAGE/PKGBUILD"
-          namcap "$PACKAGE"/*.pkg.tar.zst
+          # namcap's errors (" E: ") stop the job, whatever its exit status. Its warnings go in the log.
+          namcap "$PACKAGE/PKGBUILD" "$PACKAGE"/*.pkg.tar.zst | tee "$RUNNER_TEMP/namcap"
+          ! grep -q ' E: ' "$RUNNER_TEMP/namcap"
       - name: Pull request
         if: steps.release.outputs.tag != ''
         env:
@@ -86,7 +87,7 @@ jobs:
           gh pr create --head "$BRANCH" --title "$PACKAGE ${TAG#v}" --body "$(printf '%s\n' \
             "Moves $PACKAGE to $TAG: https://github.com/takodotid/$PROJECT/releases/tag/$TAG" \
             "" \
-            "SHA256SUMS attested by the release workflow at $TAG. Built with makepkg, namcap passed." \
+            "SHA256SUMS attested by the release workflow at $TAG. Built with makepkg; namcap found no error (warnings are in the run log)." \
             "" \
             "Before merging, read the release notes for a new file, dependency or licence that the PKGBUILD must follow." \
             "After merging, push it to the AUR: scripts/publish.sh $PACKAGE")"
