@@ -1,0 +1,92 @@
+# Each hour, and by hand: for each package, when its project has a newer stable release, open a pull request that moves
+# the PKGBUILD and .SRCINFO to it. The release's SHA256SUMS must carry the GitHub attestation of the project's release
+# workflow at that tag. The package must build with makepkg and pass namcap first. A maintainer reviews the pull request,
+# merges it, then pushes the package to the AUR by hand (README.md). Nothing here holds an AUR key.
+name: update
+on:
+  schedule:
+    - cron: '47 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: update
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  update:
+    runs-on: ubuntu-26.04
+    container: archlinux:base-devel@sha256:949ecb1661609ab7e8f6854ba03efd62792e7a796313738e94b040c095c20d91
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [tack-bin, strait-bin]
+    steps:
+      - name: Tools
+        run: pacman -Syu --noconfirm --needed git github-cli namcap
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Latest stable release, attested
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          project=$(grep -oPm1 'github\.com/takodotid/\K[^/]+' "$PACKAGE/PKGBUILD")
+          tag=$(gh release view -R "takodotid/$project" --json tagName --jq .tagName)
+          [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "the latest release of $project is $tag, not vX.Y.Z"; exit 1; }
+          if grep -qx "pkgver=${tag#v}" "$PACKAGE/PKGBUILD"; then
+            echo "$PACKAGE has ${tag#v} already"
+            exit 0
+          fi
+          branch="update/$PACKAGE-${tag#v}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "the branch $branch exists already: review its pull request"
+            exit 0
+          fi
+          gh release download -R "takodotid/$project" "$tag" -p SHA256SUMS -O "$RUNNER_TEMP/SHA256SUMS"
+          gh attestation verify "$RUNNER_TEMP/SHA256SUMS" --repo "takodotid/$project" \
+            --cert-identity "https://github.com/takodotid/$project/.github/workflows/release.yaml@refs/tags/$tag"
+          scripts/update.sh "$PACKAGE" "${tag#v}" "$RUNNER_TEMP/SHA256SUMS"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "project=$project" >> "$GITHUB_OUTPUT"
+      # makepkg refuses to run as root.
+      - name: Build, namcap, .SRCINFO
+        if: steps.release.outputs.tag != ''
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE/$PACKAGE"
+          su builder -c "cd '$GITHUB_WORKSPACE/$PACKAGE' && makepkg -f --noconfirm && makepkg --printsrcinfo > .SRCINFO"
+          namcap "$PACKAGE/PKGBUILD"
+          namcap "$PACKAGE"/*.pkg.tar.zst
+      - name: Pull request
+        if: steps.release.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ matrix.package }}
+          TAG: ${{ steps.release.outputs.tag }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+          PROJECT: ${{ steps.release.outputs.project }}
+        run: |
+          git switch -c "$BRANCH"
+          git add "$PACKAGE/PKGBUILD" "$PACKAGE/.SRCINFO"
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "$PACKAGE ${TAG#v}"
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $auth" push -q origin "$BRANCH"
+          gh pr create --head "$BRANCH" --title "$PACKAGE ${TAG#v}" --body "$(printf '%s\n' \
+            "Moves $PACKAGE to $TAG: https://github.com/takodotid/$PROJECT/releases/tag/$TAG" \
+            "" \
+            "SHA256SUMS attested by the release workflow at $TAG. Built with makepkg, namcap passed." \
+            "" \
+            "Before merging, read the release notes for a new file, dependency or licence that the PKGBUILD must follow." \
+            "After merging, push it to the AUR: scripts/publish.sh $PACKAGE")"
