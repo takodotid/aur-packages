@@ -1,5 +1,5 @@
 # Maintainer: hzmi <contact@hzmi.xyz>
-pkgname=tack-bin
+pkgname=tack-failover-bin
 pkgver=1.7.0
 pkgrel=1
 pkgdesc="Switch a stateful workload's primary between sites, in step with GitOps"

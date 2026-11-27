@@ -5,7 +5,7 @@ The PKGBUILDs of Tako's command-line tools on the [AUR](https://aur.archlinux.or
 | Package | Installs |
 |---|---|
 | [`strait-bin`](strait-bin/PKGBUILD) | [Strait](https://strait.tako.id): `strait`, `kubectl-strait` and `kubectl_complete-strait` as links to it, the man pages, and bash, zsh and fish completions |
-| [`tack-bin`](tack-bin/PKGBUILD) | [Tack](https://tack.tako.id): `tack`, the man pages, the completions, and the CRD in `/usr/share/tack` |
+| [`tack-failover-bin`](tack-failover-bin/PKGBUILD) | [Tack](https://tack.tako.id): `tack`, the man pages, the completions, and the CRD in `/usr/share/tack` |
 
 Each package installs the binary of the project's GitHub release, checked against the release's `SHA256SUMS`.
 

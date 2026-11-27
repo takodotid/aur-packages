@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [tack-bin, strait-bin]
+        package: [tack-failover-bin, strait-bin]
     steps:
       - name: Tools
         run: pacman -Syu --noconfirm --needed git github-cli namcap
