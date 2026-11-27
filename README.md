@@ -21,4 +21,6 @@ The AUR accepts automation only with a person's review ([AUR submission guidelin
 
 GitHub turns off a public repository's scheduled workflows after 60 days without activity. Run `update` by hand, or turn it on again under Actions, after a quiet stretch.
 
+Maintainer: hzmi. A new co-maintainer is added on the package's AUR page.
+
 A change to a PKGBUILD by hand: bump `pkgrel`, run `makepkg --printsrcinfo > .SRCINFO` in its directory, and build it with `makepkg -f` before the pull request.
