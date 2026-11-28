@@ -1,6 +1,6 @@
 # Each hour, and by hand: for each package, when its project has a newer stable release, open a pull request that moves
-# the PKGBUILD and .SRCINFO to it. The release's SHA256SUMS must carry the GitHub attestation of the project's release
-# workflow at that tag. The package must build with makepkg and pass namcap first. A maintainer reviews the pull request,
+# the PKGBUILD and .SRCINFO to it. The release's SHA256SUMS must be signed: for Tack and Strait, the GitHub attestation
+# of the project's release workflow at that tag; for Circuit, its release key (scripts/circuit-release.allowed_signers). The package must build with makepkg and pass namcap first. A maintainer reviews the pull request,
 # merges it, then pushes the package to the AUR by hand (README.md). Nothing here holds an AUR key.
 name: update
 on:
@@ -24,14 +24,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [tack-failover-bin, strait-bin]
+        package: [circuit-bin, tack-failover-bin, strait-bin]
     steps:
       - name: Tools
-        run: pacman -Syu --noconfirm --needed git github-cli namcap
+        run: pacman -Syu --noconfirm --needed git github-cli namcap openssh
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Latest stable release, attested
+      - name: Latest stable release, signed
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -51,8 +51,14 @@ jobs:
             exit 0
           fi
           gh release download -R "takodotid/$project" "$tag" -p SHA256SUMS -O "$RUNNER_TEMP/SHA256SUMS"
-          gh attestation verify "$RUNNER_TEMP/SHA256SUMS" --repo "takodotid/$project" \
-            --cert-identity "https://github.com/takodotid/$project/.github/workflows/release.yaml@refs/tags/$tag"
+          if [[ $project == circuit ]]; then
+            gh release download -R takodotid/circuit "$tag" -p SHA256SUMS.sshsig -O "$RUNNER_TEMP/SHA256SUMS.sshsig"
+            ssh-keygen -Y verify -f scripts/circuit-release.allowed_signers -I circuit-release -n circuit-release \
+              -s "$RUNNER_TEMP/SHA256SUMS.sshsig" < "$RUNNER_TEMP/SHA256SUMS"
+          else
+            gh attestation verify "$RUNNER_TEMP/SHA256SUMS" --repo "takodotid/$project" \
+              --cert-identity "https://github.com/takodotid/$project/.github/workflows/release.yaml@refs/tags/$tag"
+          fi
           scripts/update.sh "$PACKAGE" "${tag#v}" "$RUNNER_TEMP/SHA256SUMS"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
@@ -87,7 +93,7 @@ jobs:
           gh pr create --head "$BRANCH" --title "$PACKAGE ${TAG#v}" --body "$(printf '%s\n' \
             "Moves $PACKAGE to $TAG: https://github.com/takodotid/$PROJECT/releases/tag/$TAG" \
             "" \
-            "SHA256SUMS attested by the release workflow at $TAG. Built with makepkg; namcap found no error (warnings are in the run log)." \
+            "SHA256SUMS signed by $PROJECT's release at $TAG (attestation, or Circuit's release key). Built with makepkg; namcap found no error (warnings are in the run log)." \
             "" \
             "Before merging, read the release notes for a new file, dependency or licence that the PKGBUILD must follow." \
             "After merging, push it to the AUR: scripts/publish.sh $PACKAGE")"

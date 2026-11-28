@@ -4,7 +4,7 @@
 # The clone is kept in ${AUR_CLONES:-~/.cache/aur-clones}.
 set -euo pipefail
 
-pkg=$1
+pkg=${1:?usage: scripts/publish.sh PACKAGE, such as strait-bin}
 here=$(cd "$(dirname "$0")/.." && pwd)
 [[ -f $here/$pkg/PKGBUILD && -f $here/$pkg/.SRCINFO ]] || { echo "no $pkg/PKGBUILD and $pkg/.SRCINFO" >&2; exit 1; }
 [[ -z $(git -C "$here" status --porcelain -- "$pkg") ]] || { echo "$pkg has changes that are not committed" >&2; exit 1; }

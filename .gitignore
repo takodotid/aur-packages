@@ -4,3 +4,5 @@
 *.tar.gz
 *.pkg.tar.*
 *.log
+# Circuit's binary and licence, downloaded under their own names.
+circuit-bin/circuit-*
